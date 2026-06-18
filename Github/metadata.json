@@ -1,0 +1,6 @@
+{
+  "name": "SatSet Pak",
+  "description": "Monitoring Absensi MGS. Dashboard untuk mengecek status pengisian absensi harian kelas Ibtida'iyyah, Tsanawiyyah, dan Aliyah.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
