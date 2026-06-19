@@ -287,41 +287,22 @@ export default function App() {
     });
   };
 
-  // Navigate forward/back one day
-  const shiftDate = (direction: "prev" | "next") => {
-    const dates = ["2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10"];
-    const currentIdx = dates.indexOf(selectedDate);
-    
-    if (currentIdx !== -1) {
-      let targetIdx = direction === "prev" ? currentIdx - 1 : currentIdx + 1;
-      if (targetIdx >= 0 && targetIdx < dates.length) {
-        handleDateChange(dates[targetIdx]);
-      } else {
-        // Fallback calculation for custom dates
-        const parts = selectedDate.split("-");
-        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-        d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
-        
-        // Exclude Friday typically as schools are off
-        if (d.getDay() === 5) { // 5 is Friday
-          d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
-        }
-        
-        const pad = (n: number) => n.toString().padStart(2, '0');
-        const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-        handleDateChange(formatted);
-      }
-    } else {
-      // General calendar calculation
-      const parts = selectedDate.split("-");
-      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
-      
-      const pad = (n: number) => n.toString().padStart(2, '0');
-      const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      handleDateChange(formatted);
-    }
-  };
+// Ganti fungsi shiftDate yang lama dengan ini:
+const shiftDate = (direction: "prev" | "next") => {
+  const parts = selectedDate.split("-");
+  // Membuat objek tanggal dari string yang dipilih
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  
+  // Mengubah tanggal
+  d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
+  
+  // Format ulang ke string YYYY-MM-DD
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  
+  handleDateChange(formatted);
+};
+
 
   // ----- Interactive Input Actions -----
   const handleToggleClassStatus = (classId: string, isSudah: boolean) => {
