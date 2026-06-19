@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { SubClass, DailyAttendanceState, ClassSessionAttendance, ReminderLog, PendidikanJenjang } from "./types";
 import { 
   classesList, 
@@ -13,7 +13,6 @@ import {
 } from "./data/mockData";
 import { 
   Calendar, 
-  CalendarOff,
   Search, 
   LayoutGrid, 
   List as ListIcon, 
@@ -50,8 +49,7 @@ import {
   getSupabaseClient, 
   saveAttendanceToSupabase, 
   loadAttendanceFromSupabase,
-  SUPABASE_STARTER_SQL,
-  testSupabaseConnection
+  SUPABASE_STARTER_SQL 
 } from "./lib/supabase";
 import AdminLogin from "./components/AdminLogin";
 
@@ -63,39 +61,8 @@ export default function App() {
   const [attendanceData, setAttendanceData] = useState<DailyAttendanceState>({});
   const [reminderLogs, setReminderLogs] = useState<ReminderLog[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>("2026-06-06"); // Standard default Saturday June 6th 2026
-  const [excludedDates, setExcludedDates] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<"dashboard" | "analisis" | "reminderLogs" | "rekapEkspor">("dashboard");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-
-  // Phone numbers mapping for each homeroom teacher (Wali Kelas)
-  const [waliKelasPhones, setWaliKelasPhones] = useState<Record<string, string>>(() => {
-    const saved = localStorage.getItem("madrasah_wali_phones_v2");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        // Fallback below
-      }
-    }
-    const initialMap: Record<string, string> = {};
-    classesList.forEach((cls, idx) => {
-      // Generate realistic Indonesian mobile numbers (e.g. 0812-xxxx-xxxx)
-      const prefixes = ["0812", "0813", "0821", "0822", "0852", "0853", "0878", "0896"];
-      const prefix = prefixes[idx % prefixes.length];
-      const middle = String(1000 + (idx * 17) % 9000);
-      const end = String(2000 + (idx * 31) % 8000);
-      initialMap[cls.id] = `${prefix}-${middle}-${end}`;
-    });
-    return initialMap;
-  });
-
-  // Derived class state with corresponding WA number
-  const classesWithWa = useMemo(() => {
-    return classesList.map((cls) => ({
-      ...cls,
-      waNumber: waliKelasPhones[cls.id] || ""
-    }));
-  }, [waliKelasPhones]);
 
   // ----- Admin & Supabase Configuration States -----
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
@@ -108,31 +75,16 @@ export default function App() {
   const [supabaseUrlInput, setSupabaseUrlInput] = useState("");
   const [supabaseKeyInput, setSupabaseKeyInput] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isTestingConnection, setIsTestingConnection] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [activeSupabaseConfig, setActiveSupabaseConfig] = useState<any>(() => {
-    return getStoredSupabaseConfig();
-  });
 
   // ----- Custom Range States (Monthly Report & Export) -----
   const [rangeStartDate, setRangeStartDate] = useState<string>("2026-06-01");
   const [rangeEndDate, setRangeEndDate] = useState<string>("2026-06-15");
   const [exportFilterJenjang, setExportFilterJenjang] = useState<PendidikanJenjang | "SEMUA">("SEMUA");
-  const [exportFilterStatus, setExportFilterStatus] = useState<"SEMUA" | "LENGKAP" | "SEBAGIAN" | "BELUM_INPUT">("SEMUA");
 
   // ----- Filtering States -----
   const [filterJenjang, setFilterJenjang] = useState<PendidikanJenjang | "SEMUA">("SEMUA");
   const [filterStatus, setFilterStatus] = useState<"SEMUA" | "LENGKAP" | "SEBAGIAN" | "BELUM_INPUT">("SEMUA");
   const [searchQuery, setSearchQuery] = useState<string>("");
-
-  // Check if today is Friday (school holiday)
-  const isSelectedDateFriday = (() => {
-    if (!selectedDate) return false;
-    const parts = selectedDate.split("-");
-    if (parts.length !== 3) return false;
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-    return d.getDay() === 5; // 5 is Friday
-  })();
 
   // ----- Modal Orchestrators -----
   const [attendanceModalClass, setAttendanceModalClass] = useState<SubClass | null>(null);
@@ -169,16 +121,6 @@ export default function App() {
         setReminderLogs(JSON.parse(savedLogs));
       } catch (env) {
         setReminderLogs([]);
-      }
-    }
-
-    // 3. Excluded Dates
-    const savedExcluded = localStorage.getItem("madrasah_excluded_dates_v2");
-    if (savedExcluded) {
-      try {
-        setExcludedDates(JSON.parse(savedExcluded));
-      } catch (e) {
-        setExcludedDates([]);
       }
     }
   }, []);
@@ -247,7 +189,7 @@ export default function App() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [activeSupabaseConfig]);
+  }, []);
 
   const syncFromSupabaseCloud = async (silent = false) => {
     const supabase = getSupabaseClient();
@@ -265,10 +207,7 @@ export default function App() {
     try {
       const yearMonth = selectedDate.substring(0, 7); // e.g., "2026-06"
       const start = `${yearMonth}-01`;
-      const year = parseInt(yearMonth.substring(0, 4), 10);
-      const month = parseInt(yearMonth.substring(5, 7), 10);
-      const lastDay = new Date(year, month, 0).getDate();
-      const end = `${yearMonth}-${String(lastDay).padStart(2, "0")}`;
+      const end = `${yearMonth}-31`;
       const cloudData = await loadAttendanceFromSupabase(start, end);
 
       if (cloudData && Object.keys(cloudData).length > 0) {
@@ -301,28 +240,6 @@ export default function App() {
     }
   };
 
-  const handleTestConnection = async () => {
-    setIsTestingConnection(true);
-    setTestResult(null);
-    try {
-      const res = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
-      setTestResult(res);
-      if (res.success) {
-        showToast("Koneksi Supabase sukses teruji!", "success");
-      } else {
-        showToast("Koneksi Supabase bermasalah, silakan periksa petunjuk.", "warn");
-      }
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: err.message || String(err)
-      });
-      showToast("Koneksi Supabase gagal terhubung.", "warn");
-    } finally {
-      setIsTestingConnection(false);
-    }
-  };
-
   // Run automatically when selectedDate changes or login becomes active
   useEffect(() => {
     if (isLoggedIn) {
@@ -343,23 +260,13 @@ export default function App() {
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
 
-    // If it is Friday, show notification and do not initialize/seed attendance data
-    const parts = newDate.split("-");
-    if (parts.length === 3) {
-      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      if (d.getDay() === 5) {
-        showToast("Hari Jumat libur sekolah. Absensi ditiadakan.", "info");
-        return;
-      }
-    }
-
     // If selectedDate does not exist yet in our JSON database state, dynamically seed it as empty
     setAttendanceData((prev) => {
       if (prev[newDate]) return prev;
 
       // Class initialization mapping
       const dateSeed: DailyAttendanceState[string] = {};
-      classesWithWa.forEach((cls) => {
+      classesList.forEach((cls) => {
         dateSeed[cls.id] = {
           jamIFilled: false,
           jamIIFilled: false,
@@ -380,67 +287,45 @@ export default function App() {
     });
   };
 
-  // Navigate forward/back one day, skipping Fridays & manually excluded dates as schools are off
+  // Navigate forward/back one day
   const shiftDate = (direction: "prev" | "next") => {
-    const parts = selectedDate.split("-");
-    if (parts.length !== 3) return;
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const dates = ["2026-06-06", "2026-06-07", "2026-06-08", "2026-06-09", "2026-06-10"];
+    const currentIdx = dates.indexOf(selectedDate);
     
-    const pad = (n: number) => n.toString().padStart(2, '0');
-    let safety = 0;
-    
-    do {
-      d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
-      const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-      const isFriday = d.getDay() === 5;
-      const isCustomExcluded = excludedDates.includes(formatted);
-      if (!isFriday && !isCustomExcluded) {
-        break;
-      }
-      safety++;
-    } while (safety < 30);
-    
-    const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-    handleDateChange(formatted);
-  };
-
-  // Toggle exclusion status of a specific date (Custom holiday/Ad-hoc non-school day)
-  const toggleExcludeDate = (dateStr: string) => {
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-      if (d.getDay() === 5) {
-        showToast("Hari Jumat secara otomatis adalah hari libur mingguan.", "info");
-        return;
-      }
-    }
-
-    setExcludedDates((prev) => {
-      let updated: string[];
-      if (prev.includes(dateStr)) {
-        updated = prev.filter((d) => d !== dateStr);
-        showToast(`Absensi untuk ${formatIndonesianDate(dateStr)} dibuka kembali.`, "success");
+    if (currentIdx !== -1) {
+      let targetIdx = direction === "prev" ? currentIdx - 1 : currentIdx + 1;
+      if (targetIdx >= 0 && targetIdx < dates.length) {
+        handleDateChange(dates[targetIdx]);
       } else {
-        updated = [...prev, dateStr];
-        showToast(`Absensi untuk ${formatIndonesianDate(dateStr)} dihapus & ditandai libur.`, "success");
+        // Fallback calculation for custom dates
+        const parts = selectedDate.split("-");
+        const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+        d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
+        
+        // Exclude Friday typically as schools are off
+        if (d.getDay() === 5) { // 5 is Friday
+          d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
+        }
+        
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        handleDateChange(formatted);
       }
-      localStorage.setItem("madrasah_excluded_dates_v2", JSON.stringify(updated));
-      return updated;
-    });
-  };
-
-  // Update a Wali Kelas's phone number
-  const handleUpdateWaliPhone = (classId: string, phone: string) => {
-    setWaliKelasPhones((prev) => {
-      const updated = { ...prev, [classId]: phone };
-      localStorage.setItem("madrasah_wali_phones_v2", JSON.stringify(updated));
-      return updated;
-    });
+    } else {
+      // General calendar calculation
+      const parts = selectedDate.split("-");
+      const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+      d.setDate(direction === "prev" ? d.getDate() - 1 : d.getDate() + 1);
+      
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const formatted = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+      handleDateChange(formatted);
+    }
   };
 
   // ----- Interactive Input Actions -----
   const handleToggleClassStatus = (classId: string, isSudah: boolean) => {
-    const cls = classesWithWa.find(c => c.id === classId);
+    const cls = classesList.find(c => c.id === classId);
     if (!cls) return;
     const emptyRecords: ClassSessionAttendance = {
       jamI: isSudah ? cls.students.map(s => ({ studentId: s.id, status: "HADIR" })) : [],
@@ -477,10 +362,10 @@ export default function App() {
     });
 
     setAttendanceModalClass(null);
-    showToast(`Absensi kelas ${classesWithWa.find(c => c.id === classId)?.fullName} berhasil disimpan secara lokal!`, "success");
+    showToast(`Absensi kelas ${classesList.find(c => c.id === classId)?.fullName} berhasil disimpan secara lokal!`, "success");
 
     // Background push to Supabase
-    const cls = classesWithWa.find(c => c.id === classId);
+    const cls = classesList.find(c => c.id === classId);
     if (cls) {
       try {
         const success = await saveAttendanceToSupabase(
@@ -536,10 +421,8 @@ export default function App() {
       const initial = generateInitialState();
       setAttendanceData(initial);
       setReminderLogs([]);
-      setExcludedDates([]);
       localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(initial));
       localStorage.removeItem(STORAGE_KEY_LOGS);
-      localStorage.removeItem("madrasah_excluded_dates_v2");
       setSelectedDate("2026-06-06");
       showToast("Seluruh database absensi harian berhasil disetel ulang ke kondisi default.", "info");
     }
@@ -554,34 +437,14 @@ export default function App() {
   let countBelumInput = 0;
 
   // Gather specific list of classes matched with filled state
-  const classStatusInfo = classesWithWa.map((cls) => {
+  const classStatusInfo = classesList.map((cls) => {
     const dayState = activeDateData[cls.id];
-    
-    let status: "LENGKAP" | "SEBAGIAN" | "BELUM_INPUT" = "BELUM_INPUT";
-    let j1 = false;
-    let j2 = false;
-    let j3 = false;
-    let filledCount = 0;
+    const isSudah = dayState ? (dayState.jamIFilled || dayState.jamIIFilled || dayState.jamIIIFilled) : false;
 
-    if (dayState) {
-      j1 = dayState.jamIFilled;
-      j2 = dayState.jamIIFilled;
-      j3 = dayState.jamIIIFilled;
-      
-      if (j1) filledCount++;
-      if (j2) filledCount++;
-      if (j3) filledCount++;
-
-      if (j1 && j2 && j3) {
-        status = "LENGKAP";
-        countLengkap++;
-      } else if (j1 || j2 || j3) {
-        status = "SEBAGIAN";
-        countSebagian++;
-      } else {
-        status = "BELUM_INPUT";
-        countBelumInput++;
-      }
+    let status: "LENGKAP" | "BELUM_INPUT" = "BELUM_INPUT";
+    if (isSudah) {
+      status = "LENGKAP";
+      countLengkap++;
     } else {
       status = "BELUM_INPUT";
       countBelumInput++;
@@ -589,15 +452,15 @@ export default function App() {
 
     return {
       subClass: cls,
-      j1,
-      j2,
-      j3,
-      filledCount,
+      j1: isSudah,
+      j2: isSudah,
+      j3: isSudah,
+      filledCount: isSudah ? 3 : 0,
       status
     };
   });
 
-  const totalClasses = classesWithWa.length;
+  const totalClasses = classesList.length;
   const completionRatePercent = totalClasses > 0 
     ? Math.round((countLengkap / totalClasses) * 100) 
     : 0;
@@ -729,7 +592,6 @@ export default function App() {
                 const config = getStoredSupabaseConfig();
                 setSupabaseUrlInput(config.url);
                 setSupabaseKeyInput(config.anonKey);
-                setTestResult(null);
                 setShowSupabaseModal(true);
               }}
               className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all cursor-pointer flex items-center gap-1.5 border-2 ${
@@ -781,7 +643,7 @@ export default function App() {
         </div>
       </header>
 
-       {/* Upper Date Context Bar */}
+      {/* Upper Date Context Bar */}
       <section className="bg-white border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4.5 flex flex-col md:flex-row items-center justify-between gap-4">
           
@@ -791,63 +653,36 @@ export default function App() {
             </span>
             <div>
               <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Hari Pembelajaran Terpilih</span>
-              <h2 className="text-lg font-extrabold text-slate-800 leading-none mt-1 flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-extrabold text-slate-800 leading-none mt-1">
                 {formatIndonesianDate(selectedDate)}
-                {excludedDates.includes(selectedDate) && (
-                  <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold uppercase bg-rose-50 border border-rose-200 text-rose-700">Libur</span>
-                )}
               </h2>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 justify-center md:justify-end">
-            <div className="flex items-center gap-2.5 bg-slate-50/80 p-1.5 rounded-xl border border-slate-200/50">
-              <button
-                onClick={() => shiftDate("prev")}
-                className="p-1.5 bg-white hover:bg-slate-100/80 rounded-lg text-slate-650 transition-all border border-slate-150 cursor-pointer shadow-xs"
-                title="Hari Sebelumnya"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
+          <div className="flex items-center gap-2.5 bg-slate-50/80 p-1.5 rounded-xl border border-slate-200/50">
+            <button
+              onClick={() => shiftDate("prev")}
+              className="p-1.5 bg-white hover:bg-slate-100/80 rounded-lg text-slate-650 transition-all border border-slate-150 cursor-pointer shadow-xs"
+              title="Hari Sebelumnya"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
 
-              {/* Localized Inline Calendar Input */}
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => handleDateChange(e.target.value)}
-                className="text-xs font-bold text-slate-700 bg-white px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-xs"
-              />
+            {/* Localized Inline Calendar Input */}
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="text-xs font-bold text-slate-700 bg-white px-3 py-1.5 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-xs"
+            />
 
-              <button
-                onClick={() => shiftDate("next")}
-                className="p-1.5 bg-white hover:bg-slate-100/80 rounded-lg text-slate-650 transition-all border border-slate-150 cursor-pointer shadow-xs"
-                title="Hari Berikutnya"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Custom Holiday Toggle */}
-            {(!selectedDate.split("-").length || !(() => {
-              const parts = selectedDate.split("-");
-              if (parts.length !== 3) return false;
-              const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-              return d.getDay() === 5;
-            })()) && (
-              <button
-                type="button"
-                onClick={() => toggleExcludeDate(selectedDate)}
-                className={`px-3 py-2 border rounded-xl text-[10px] font-extrabold uppercase tracking-widest cursor-pointer transition-all flex items-center gap-1.5 ${
-                  excludedDates.includes(selectedDate)
-                    ? "bg-emerald-50 hover:bg-emerald-100/60 text-emerald-700 border-emerald-200"
-                    : "bg-rose-50 hover:bg-rose-100/60 text-rose-700 border-rose-200"
-                }`}
-                title={excludedDates.includes(selectedDate) ? "Buka kembali absensi hari ini" : "Tandandai hari ini sebagai libur & hapus absensi"}
-              >
-                <CalendarOff className="w-3.5 h-3.5 shrink-0" />
-                <span>{excludedDates.includes(selectedDate) ? "Buka Absensi" : "Diliburkan"}</span>
-              </button>
-            )}
+            <button
+              onClick={() => shiftDate("next")}
+              className="p-1.5 bg-white hover:bg-slate-100/80 rounded-lg text-slate-650 transition-all border border-slate-150 cursor-pointer shadow-xs"
+              title="Hari Berikutnya"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
 
         </div>
@@ -859,81 +694,8 @@ export default function App() {
         {/* Dashboard Tab Content */}
         {activeTab === "dashboard" && (
           <div className="space-y-8">
-            {isSelectedDateFriday ? (
-              <div className="bg-gradient-to-br from-amber-50/65 to-orange-50/30 rounded-3xl border border-amber-100 p-8 md:p-12 text-center max-w-2xl mx-auto space-y-6 shadow-xs my-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-amber-100 text-amber-700 shadow-xs mb-2">
-                  <CalendarOff className="w-8 h-8" />
-                </div>
-                <div className="space-y-2.5">
-                  <span className="inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-amber-100 text-amber-800 border border-amber-200">
-                    Hari Libur Madrasah
-                  </span>
-                  <h3 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">
-                    Hari Jumat: Libur Sekolah
-                  </h3>
-                  <p className="text-xs md:text-sm text-slate-500 max-w-md mx-auto leading-relaxed font-semibold">
-                    Madrasah MGS diliburkan setiap hari Jumat. Seluruh aktivitas absensi kelas, peninjauan absensi harian, dan pengiriman pesan pengingat (reminder) dinonaktifkan untuk hari ini.
-                  </p>
-                </div>
-                <div className="border-t border-amber-100/70 pt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    onClick={() => shiftDate("prev")}
-                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 rounded-xl border border-slate-200 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Hari Sebelumnya
-                  </button>
-                  <button
-                    onClick={() => shiftDate("next")}
-                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-slate-900 text-white hover:bg-slate-850 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    Hari Berikutnya
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ) : excludedDates.includes(selectedDate) ? (
-              <div className="bg-gradient-to-br from-rose-50/65 to-red-50/30 rounded-3xl border border-rose-100 p-8 md:p-12 text-center max-w-2xl mx-auto space-y-6 shadow-xs my-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-rose-100 text-rose-700 shadow-xs mb-2">
-                  <CalendarOff className="w-8 h-8" />
-                </div>
-                <div className="space-y-2.5">
-                  <span className="inline-block px-3 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest bg-rose-100 text-rose-850 border border-rose-200">
-                    Hari Libur Khusus / Ad-Hoc
-                  </span>
-                  <h3 className="text-xl md:text-2xl font-black text-rose-900 tracking-tight">
-                    Absensi Diliburkan / Dihapus
-                  </h3>
-                  <p className="text-xs md:text-sm text-slate-500 max-w-md mx-auto leading-relaxed font-semibold">
-                    Hari ini ({formatIndonesianDate(selectedDate)}) telah ditandai sebagai hari libur khusus selain hari Jumat. Seluruh rekaman absensi hari ini dikecualikan dari semua laporan bulanan.
-                  </p>
-                </div>
-                <div className="border-t border-rose-100/70 pt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
-                  <button
-                    onClick={() => toggleExcludeDate(selectedDate)}
-                    className="w-full sm:w-auto px-4.5 py-2.5 text-xs font-extrabold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    Buka Absensi Kembali
-                  </button>
-                  <button
-                    onClick={() => shiftDate("prev")}
-                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-white text-slate-700 hover:bg-slate-50 rounded-xl border border-slate-200 shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                    Hari Sebelumnya
-                  </button>
-                  <button
-                    onClick={() => shiftDate("next")}
-                    className="w-full sm:w-auto px-4 py-2.5 text-xs font-bold bg-slate-900 text-white hover:bg-slate-850 rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    Hari Berikutnya
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {/* Bento statistics row */}
+            
+            {/* Bento statistics row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               
               {/* Stat 1: Total Classes */}
@@ -945,11 +707,11 @@ export default function App() {
                 colorType="primary"
                 customContent={
                   <div className="flex gap-2 text-[10px] font-bold text-indigo-600 uppercase">
-                    <span>{classesWithWa.filter(c => c.jenjang === "Ibtida'iyyah").length} MI</span>
+                    <span>{classesList.filter(c => c.jenjang === "Ibtida'iyyah").length} MI</span>
                     <span>&bull;</span>
-                    <span>{classesWithWa.filter(c => c.jenjang === "Tsanawiyyah").length} MTs</span>
+                    <span>{classesList.filter(c => c.jenjang === "Tsanawiyyah").length} MTs</span>
                     <span>&bull;</span>
-                    <span>{classesWithWa.filter(c => c.jenjang === "Aliyah").length} MA</span>
+                    <span>{classesList.filter(c => c.jenjang === "Aliyah").length} MA</span>
                   </div>
                 }
               />
@@ -958,14 +720,12 @@ export default function App() {
               <StatCard
                 title="Sudah Absen"
                 value={countLengkap}
-                subtitle="Selesai mengisi seluruh sesi"
+                subtitle="Selesai mengisi absensi harian"
                 icon={CheckSquare}
                 colorType="success"
                 customContent={
-                  <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tight flex items-center gap-1.5 mt-1">
-                    <span>{countLengkap} Lengkap</span>
-                    <span>&bull;</span>
-                    <span className="text-amber-500">{countSebagian} Sebagian</span>
+                  <div className="text-xs font-black text-emerald-600 bg-emerald-100/55 px-2 py-0.5 rounded-sm">
+                    {countLengkap} Kelas Terisi
                   </div>
                 }
               />
@@ -1193,13 +953,8 @@ export default function App() {
                                   {stageLabel}
                                 </span>
                               </td>
-                              <td className="px-6 py-4 font-semibold text-slate-705">
-                                <div>{info.subClass.waliKelas}</div>
-                                {info.subClass.waNumber && (
-                                  <div className="text-[10px] text-emerald-600 font-bold font-mono mt-0.5">
-                                    WA: {info.subClass.waNumber}
-                                  </div>
-                                )}
+                              <td className="px-6 py-4 font-medium text-slate-500">
+                                {info.subClass.waliKelas}
                               </td>
 
                               {/* Centang column SUDAH */}
@@ -1254,11 +1009,11 @@ export default function App() {
                                         setReminderModalClass(info.subClass);
                                         setUnfilledJamsForReminder(["Sesi Utama"]);
                                       }}
-                                      className="p-1 px-2.5 text-xs text-emerald-705 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/50 rounded-lg transition-colors font-bold flex items-center gap-1 cursor-pointer"
-                                      title="Kirim peringatan ke Guru Kelas via WhatsApp"
+                                      className="p-1 px-2.5 text-xs text-amber-600 bg-amber-50/80 hover:bg-amber-100 border border-amber-200/50 rounded-lg transition-colors font-bold flex items-center gap-1 cursor-pointer"
+                                      title="Kirim peringatan ke Guru Kelas"
                                     >
-                                      <MessageSquare className="w-3.5 h-3.5 fill-emerald-600/10 text-emerald-600" />
-                                      Ping WA
+                                      <Bell className="w-3.5 h-3.5" />
+                                      Ping
                                     </button>
                                   )}
                                   <button
@@ -1296,8 +1051,6 @@ export default function App() {
                 </button>
               </div>
             )}
-              </>
-            )}
 
           </div>
         )}
@@ -1314,15 +1067,10 @@ export default function App() {
               const current = new Date(start);
               let safetyCounter = 0;
               while (current <= end && safetyCounter < 100) {
-                if (current.getDay() !== 5) { // 5 is Friday
-                  const y = current.getFullYear();
-                  const m = String(current.getMonth() + 1).padStart(2, "0");
-                  const d = String(current.getDate()).padStart(2, "0");
-                  const formatted = `${y}-${m}-${d}`;
-                  if (!excludedDates.includes(formatted)) {
-                    list.push(formatted);
-                  }
-                }
+                const y = current.getFullYear();
+                const m = String(current.getMonth() + 1).padStart(2, "0");
+                const d = String(current.getDate()).padStart(2, "0");
+                list.push(`${y}-${m}-${d}`);
                 current.setDate(current.getDate() + 1);
                 safetyCounter++;
               }
@@ -1338,36 +1086,23 @@ export default function App() {
           const rekapRows: Array<{
             date: string;
             subClass: SubClass;
-            statusType: "LENGKAP" | "SEBAGIAN" | "BELUM_INPUT";
+            isSudah: boolean;
             statusLabel: string;
           }> = [];
 
           datesInRange.forEach((date) => {
             const dayData = attendanceData[date] || {};
-            classesWithWa.forEach((cls) => {
+            classesList.forEach((cls) => {
               if (exportFilterJenjang !== "SEMUA" && cls.jenjang !== exportFilterJenjang) return;
 
               const dayState = dayData[cls.id];
-              let statusLabel = "Belum Input";
-              let statusType: "LENGKAP" | "SEBAGIAN" | "BELUM_INPUT" = "BELUM_INPUT";
-
-              if (dayState) {
-                const { jamIFilled, jamIIFilled, jamIIIFilled } = dayState;
-                if (jamIFilled && jamIIFilled && jamIIIFilled) {
-                  statusLabel = "Lengkap";
-                  statusType = "LENGKAP";
-                } else if (jamIFilled || jamIIFilled || jamIIIFilled) {
-                  statusLabel = "Sebagian";
-                  statusType = "SEBAGIAN";
-                }
-              }
-
-              if (exportFilterStatus !== "SEMUA" && statusType !== exportFilterStatus) return;
+              const isSudah = dayState ? (dayState.jamIFilled || dayState.jamIIFilled || dayState.jamIIIFilled) : false;
+              const statusLabel = isSudah ? "Sudah Absen" : "Belum Input";
 
               rekapRows.push({
                 date,
                 subClass: cls,
-                statusType,
+                isSudah,
                 statusLabel
               });
             });
@@ -1404,37 +1139,23 @@ export default function App() {
           const handleExportDetailSiswaCSV = () => {
             try {
               let csvContent = "\uFEFF"; // BOM for Excel compatibility
-              csvContent += "TANGGAL,JENJANG,KELAS,WALI KELAS,NAMA SISWA,NO ABSEN,JAM I,JAM II,JAM III\n";
+              csvContent += "TANGGAL,JENJANG,KELAS,WALI KELAS,NAMA SISWA,NO ABSEN,STATUS ABSENSI\n";
 
               datesInRange.forEach((dt) => {
                 const dayData = attendanceData[dt] || {};
-                classesWithWa.forEach((cls) => {
+                classesList.forEach((cls) => {
                   if (exportFilterJenjang !== "SEMUA" && cls.jenjang !== exportFilterJenjang) return;
 
                   const dayState = dayData[cls.id];
-                  let statusType: "LENGKAP" | "SEBAGIAN" | "BELUM_INPUT" = "BELUM_INPUT";
-
-                  if (dayState) {
-                    const { jamIFilled, jamIIFilled, jamIIIFilled } = dayState;
-                    if (jamIFilled && jamIIFilled && jamIIIFilled) {
-                      statusType = "LENGKAP";
-                    } else if (jamIFilled || jamIIFilled || jamIIIFilled) {
-                      statusType = "SEBAGIAN";
-                    }
-                  }
-
-                  if (exportFilterStatus !== "SEMUA" && statusType !== exportFilterStatus) return;
+                  const isSudah = dayState ? (dayState.jamIFilled || dayState.jamIIFilled || dayState.jamIIIFilled) : false;
+                  const statusStr = isSudah ? "Sudah Absen" : "Belum Absen";
 
                   cls.students.forEach((student) => {
                     const fWali = cls.waliKelas.replace(/"/g, '""');
                     const fKelas = cls.fullName.replace(/"/g, '""');
                     const fNama = student.nama.replace(/"/g, '""');
 
-                    const sJamI = dayState?.records?.jamI?.find(r => r.studentId === student.id)?.status || "BELUM_INPUT";
-                    const sJamII = dayState?.records?.jamII?.find(r => r.studentId === student.id)?.status || "BELUM_INPUT";
-                    const sJamIII = dayState?.records?.jamIII?.find(r => r.studentId === student.id)?.status || "BELUM_INPUT";
-
-                    csvContent += `"${dt}","${cls.jenjang}","${fKelas}","${fWali}","${fNama}",${student.absenNo},"${sJamI}","${sJamII}","${sJamIII}"\n`;
+                    csvContent += `"${dt}","${cls.jenjang}","${fKelas}","${fWali}","${fNama}",${student.absenNo},"${statusStr}"\n`;
                   });
                 });
               });
@@ -1471,39 +1192,6 @@ export default function App() {
                   
                   {/* Export buttons */}
                   <div className="flex flex-wrap gap-2.5 self-stretch lg:self-auto">
-                    {getSupabaseClient() && (
-                      <button
-                        onClick={async () => {
-                          setIsSyncing(true);
-                          try {
-                            const cloudData = await loadAttendanceFromSupabase(rangeStartDate, rangeEndDate);
-                            if (cloudData && Object.keys(cloudData).length > 0) {
-                              setAttendanceData((prev) => {
-                                const merged = { ...prev };
-                                Object.keys(cloudData).forEach((dt) => {
-                                  if (!merged[dt]) merged[dt] = {};
-                                  merged[dt] = { ...merged[dt], ...cloudData[dt] };
-                                });
-                                localStorage.setItem(STORAGE_KEY_STATE, JSON.stringify(merged));
-                                return merged;
-                              });
-                              showToast(`Sukses sinkronisasi data cloud untuk rentang tanggal terpilih!`, "success");
-                            } else {
-                              showToast("Tidak ditemukan rekaman absensi cloud untuk rentang tanggal ini.", "info");
-                            }
-                          } catch (err: any) {
-                            showToast(`Gagal sinkronisasi data cloud: ${err.message || err}`, "warn");
-                          } finally {
-                            setIsSyncing(false);
-                          }
-                        }}
-                        disabled={isSyncing}
-                        className="flex-1 lg:flex-none uppercase tracking-wider inline-flex items-center justify-center gap-1.5 px-4.5 py-2.5 bg-slate-900 hover:bg-slate-800 font-bold text-[11px] text-white rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50"
-                      >
-                        <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin text-white" : ""}`} />
-                        Sinkronkan Range
-                      </button>
-                    )}
                     <button
                       onClick={handleExportCSV}
                       className="flex-1 lg:flex-none uppercase tracking-wider inline-flex items-center justify-center gap-1.5 px-4.5 py-2.5 bg-indigo-600 hover:bg-indigo-700 font-bold text-[11px] text-white rounded-xl transition-all shadow-xs cursor-pointer"
@@ -1522,7 +1210,7 @@ export default function App() {
                 </div>
 
                 {/* Filter and selector row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 border-t border-slate-100 mt-6 pt-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-t border-slate-100 mt-6 pt-6">
                   <div>
                     <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Tanggal Mulai Pengamatan</label>
                     <input
@@ -1554,53 +1242,8 @@ export default function App() {
                       <option value="Aliyah">Aliyah (MA)</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">Pilih Status Absensi</label>
-                    <select
-                      value={exportFilterStatus}
-                      onChange={(e) => setExportFilterStatus(e.target.value as any)}
-                      className="mt-2 block w-full text-xs font-bold text-slate-700 bg-slate-50 hover:bg-slate-100/50 px-3.5 py-2.5 border border-slate-250 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-indigo-500 cursor-pointer shadow-xs transition-colors"
-                    >
-                      <option value="SEMUA">Semua Status (Lengkap / Sebagian / Belum)</option>
-                      <option value="LENGKAP">Lengkap (Seluruh Sesi Terisi)</option>
-                      <option value="SEBAGIAN">Sebagian (Baru Sesi Tertentu)</option>
-                      <option value="BELUM_INPUT">Belum Input (Kosong Sama Sekali)</option>
-                    </select>
-                  </div>
                 </div>
               </div>
-
-              {/* Custom Holiday Excluded Dates List */}
-              {excludedDates.length > 0 && (
-                <div className="bg-gradient-to-r from-rose-50/40 to-slate-50/30 border border-rose-100/70 rounded-2xl p-4.5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <span className="p-2.5 bg-rose-50 text-rose-600 rounded-xl border border-rose-100/40 shrink-0">
-                      <CalendarOff className="w-4 h-4" />
-                    </span>
-                    <div>
-                      <h4 className="text-xs font-black text-slate-800 tracking-tight">Daftar Hari Libur Khusus / Ad-Hoc Terdaftar</h4>
-                      <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-                        Tanggal-tanggal ini telah dihapus dari perhitungan absensi, bagan tren analisis, dan ekspor laporan.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5 max-w-full md:max-w-xl">
-                    {excludedDates.map((d) => (
-                      <div key={d} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-rose-100/80 rounded-lg text-[10px] font-bold text-rose-700 shadow-xs">
-                        <span>{formatIndonesianDate(d)}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleExcludeDate(d)}
-                          className="w-4 h-4 rounded-full hover:bg-rose-100/50 flex items-center justify-center text-rose-450 hover:text-rose-600 cursor-pointer transition-colors"
-                          title="Buka kembali absensi untuk hari ini"
-                        >
-                          &times;
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {/* Data Preview Table */}
               <div className="bg-white rounded-3xl border border-slate-200/50 overflow-hidden shadow-xs">
@@ -1644,10 +1287,8 @@ export default function App() {
                             {/* Aggregated Status */}
                             <td className="px-6 py-3.5 text-center">
                               <span className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md font-bold text-[10px] border ${
-                                row.statusType === "LENGKAP"
+                                row.isSudah
                                   ? "bg-emerald-50 border-emerald-100 text-emerald-700"
-                                  : row.statusType === "SEBAGIAN"
-                                  ? "bg-amber-50 border-amber-100 text-amber-700"
                                   : "bg-rose-50 border-rose-100/70 text-rose-700"
                               }`}>
                                 ● {row.statusLabel}
@@ -1675,8 +1316,7 @@ export default function App() {
         {activeTab === "analisis" && (
           <TrendChart 
             attendanceData={attendanceData} 
-            classes={classesWithWa} 
-            excludedDates={excludedDates}
+            classes={classesList} 
           />
         )}
 
@@ -1805,7 +1445,6 @@ export default function App() {
             setUnfilledJamsForReminder([]);
           }}
           onConfirmSend={handleRegisterReminder}
-          onUpdateWaNumber={handleUpdateWaliPhone}
         />
       )}
 
@@ -1862,39 +1501,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Live Connection Diagnostics */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Diagnosis Koneksi</span>
-                    <span className="text-[9px] text-slate-400 font-semibold">Uji kecocokan kredensial Anda langsung</span>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={isTestingConnection}
-                    onClick={handleTestConnection}
-                    className="px-3.5 py-1.5 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100/70 text-indigo-700 rounded-xl text-xs font-bold transition-all disabled:opacity-50 cursor-pointer active:scale-95"
-                  >
-                    {isTestingConnection ? "Sedang Menguji..." : "Uji Koneksi Supabase"}
-                  </button>
-                </div>
-                {testResult && (
-                  <div className={`p-3.5 rounded-xl border text-xs leading-relaxed font-semibold transition-all ${
-                    testResult.success 
-                      ? "bg-emerald-50 border-emerald-100 text-emerald-800" 
-                      : "bg-amber-50 border-amber-100 text-amber-800"
-                  }`}>
-                    <div className="flex items-start gap-2">
-                      <span className="text-sm mt-0.5">{testResult.success ? "🟢" : "⚠️"}</span>
-                      <div>
-                        <span className="font-extrabold block mb-0.5">{testResult.success ? "Sambungan Aktif" : "Perlu Penyesuaian"}</span>
-                        <span>{testResult.message}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Skrip Migrasi Tabel SQL</span>
@@ -1922,7 +1528,6 @@ export default function App() {
                 onClick={() => {
                   if (confirm("Hapus konfigurasi Supabase kustom?")) {
                     saveSupabaseConfig("", "");
-                    setActiveSupabaseConfig({ url: "", anonKey: "" });
                     setSupabaseUrlInput("");
                     setSupabaseKeyInput("");
                     setShowSupabaseModal(false);
@@ -1947,10 +1552,7 @@ export default function App() {
                       showToast("Kedua konfigurasi Supabase wajib terisi!", "warn");
                       return;
                     }
-                    const url = supabaseUrlInput.trim();
-                    const key = supabaseKeyInput.trim();
-                    saveSupabaseConfig(url, key);
-                    setActiveSupabaseConfig({ url, anonKey: key });
+                    saveSupabaseConfig(supabaseUrlInput.trim(), supabaseKeyInput.trim());
                     showToast("Kredensial Supabase disimpan!", "success");
                     setShowSupabaseModal(false);
                     await syncFromSupabaseCloud(false);
