@@ -287,7 +287,6 @@ export default function App() {
     });
   };
 
-// Ganti fungsi shiftDate yang lama dengan ini:
 const shiftDate = (direction: "prev" | "next") => {
   const parts = selectedDate.split("-");
   // Membuat objek tanggal dari string yang dipilih
